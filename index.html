@@ -8,6 +8,7 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDUSUVwIsxOx_4UlCj6chpfew2gVE6Ifn4",
@@ -20,6 +21,11 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+  const auth = getAuth(app);
+  window._auth = auth;
+  window._entrar = signInWithEmailAndPassword;
+  window._sair = signOut;
+  onAuthStateChanged(auth, function(u){ window._usuario = u || null; if(window._onAuth) window._onAuth(u); });
 
   window._db = db;
   window._collection = collection;
@@ -184,7 +190,18 @@ textarea{resize:none;line-height:1.5}
         <div class="card-title"><span class="dot"></span>Identificação</div>
         <div class="field">
           <label>Nome do professor</label>
-          <input type="text" id="nome" placeholder="Seu nome completo">
+          <select id="nome" onchange="trocaProfessor()">
+            <option value="">Selecione</option>
+            <option value="ALESSANDRO DOMINGOS">Alessandro Domingos</option>
+            <option value="ÁUREA ELISA">Áurea Elisa</option>
+            <option value="EDUARD">Eduard</option>
+            <option value="FELIPE MÓRI">Felipe Móri</option>
+            <option value="MARCO AURELIO MOREIRA HONORATO">Marco Aurélio Honorato</option>
+            <option value="RAFAEL COSTA SUZUKI">Rafael Costa Suzuki</option>
+            <option value="THOMAS LISBOA">Thomas Lisboa</option>
+            <option value="__outro">Outro (digitar)</option>
+          </select>
+          <input type="text" id="nome-outro" placeholder="Digite o nome completo" style="display:none;margin-top:8px">
         </div>
         <div class="row2">
           <div class="field">
@@ -199,7 +216,7 @@ textarea{resize:none;line-height:1.5}
           </div>
           <div class="field">
             <label>Ano</label>
-            <input type="number" id="ano" value="2025" min="2020" max="2099">
+            <input type="number" id="ano" min="2020" max="2099">
           </div>
         </div>
       </div>
@@ -298,10 +315,11 @@ textarea{resize:none;line-height:1.5}
     <div class="admin-pass-card">
       <div style="font-size:32px;margin-bottom:12px">🔐</div>
       <h2>Área do administrador</h2>
-      <p>Digite a senha para acessar o painel.</p>
-      <input type="password" id="admin-pwd" placeholder="Senha" onkeydown="if(event.key==='Enter')checkPass()">
-      <button class="btn-admin-login" onclick="checkPass()">Entrar</button>
-      <div class="error-msg" id="pwd-error">Senha incorreta.</div>
+      <p>Entre com a conta de administrador.</p>
+      <input type="email" id="admin-email" placeholder="E-mail" autocomplete="username" onkeydown="if(event.key==='Enter')checkPass()">
+      <input type="password" id="admin-pwd" placeholder="Senha" autocomplete="current-password" style="margin-top:8px" onkeydown="if(event.key==='Enter')checkPass()">
+      <button class="btn-admin-login" id="btn-admin-login" onclick="checkPass()">Entrar</button>
+      <div class="error-msg" id="pwd-error">E-mail ou senha incorretos.</div>
     </div>
   </div>
 
@@ -310,6 +328,7 @@ textarea{resize:none;line-height:1.5}
       <div class="admin-header">
         <h2>Painel do Administrador</h2>
         <p id="admin-subtitle">Carregando relatórios...</p>
+        <button class="btn-secondary" style="margin-top:10px" onclick="sairAdmin()">Sair</button>
       </div>
       <div class="stats-row">
         <div class="stat-card"><div class="val" id="st-total">—</div><div class="lbl">Relatórios</div></div>
@@ -334,7 +353,6 @@ textarea{resize:none;line-height:1.5}
 
 <script>
 var reg=0, exam=0, aulaCount=0;
-var PASS='All1ance3usou!';
 var currentRel=null;
 var todosRelatorios=[];
 var ADMIN_WA='551298241977';
@@ -391,7 +409,7 @@ function collectData(){
   });
   var exOn=document.getElementById('exame-toggle').checked;
   return{
-    nome:document.getElementById('nome').value.trim(),
+    nome:nomeProfessor(),
     mes:document.getElementById('mes').value,
     ano:document.getElementById('ano').value,
     reg:parseInt(document.getElementById('reg-val').value)||0,
@@ -406,7 +424,7 @@ function collectData(){
 }
 
 async function enviar(){
-  var nome=document.getElementById('nome').value.trim();
+  var nome=nomeProfessor();
   var mes=document.getElementById('mes').value;
   if(!nome){alert('Informe o nome do professor.');return;}
   if(!mes){alert('Selecione o mês de referência.');return;}
@@ -550,11 +568,36 @@ function exportarPDF(d){
   toast('PDF gerado com sucesso!');
 }
 
+/* O relatorio e do mes que acabou de fechar, entao ate o dia 10 o padrao e o
+   mes anterior — e em janeiro isso puxa o ano anterior junto. */
+function anoPadrao(){
+  var h=new Date();
+  return (h.getDate()<=10 && h.getMonth()===0) ? (h.getFullYear()-1) : h.getFullYear();
+}
+function mesPadrao(){
+  var M=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  var h=new Date();
+  return (h.getDate()<=10) ? M[(h.getMonth()+11)%12] : '';
+}
+function trocaProfessor(){
+  var sel=document.getElementById('nome');
+  var out=document.getElementById('nome-outro');
+  out.style.display = (sel.value==='__outro') ? 'block' : 'none';
+  if(sel.value!=='__outro') out.value='';
+}
+function nomeProfessor(){
+  var sel=document.getElementById('nome').value;
+  if(sel==='__outro') return document.getElementById('nome-outro').value.trim();
+  return sel;
+}
+
 function resetForm(){
   reg=0;exam=0;aulaCount=0;
-  ['nome','exame-data','exame-obs','obs'].forEach(function(id){document.getElementById(id).value='';});
+  ['exame-data','exame-obs','obs','nome-outro'].forEach(function(id){document.getElementById(id).value='';});
+  document.getElementById('nome').value='';
+  document.getElementById('nome-outro').style.display='none';
   document.getElementById('mes').value='';
-  document.getElementById('ano').value='2025';
+  document.getElementById('ano').value=anoPadrao();
   document.getElementById('reg-val').value='0';
   document.getElementById('exam-val').textContent='0';
   document.getElementById('aulas-list').innerHTML='';
@@ -589,15 +632,49 @@ function goAdmin(btn){
   }
 }
 
-function checkPass(){
-  if(document.getElementById('admin-pwd').value===PASS){
-    document.getElementById('admin-login-screen').style.display='none';
-    document.getElementById('admin-panel').style.display='block';
+/* A senha do administrador ficava escrita aqui dentro, em texto puro, num
+   repositorio publico — qualquer pessoa que abrisse o codigo lia. Nao existe
+   jeito de guardar segredo em codigo que roda no navegador, entao a porta
+   passou a ser autenticacao de verdade no Firebase: o segredo mora na conta,
+   nao no arquivo. Quem protege os dados sao as regras do Firestore. */
+async function checkPass(){
+  var email=document.getElementById('admin-email').value.trim();
+  var senha=document.getElementById('admin-pwd').value;
+  var erro=document.getElementById('pwd-error');
+  erro.style.display='none';
+  if(!email||!senha){ erro.textContent='Preencha e-mail e senha.'; erro.style.display='block'; return; }
+  if(!window._auth){ erro.textContent='Aguarde a conexão com o servidor.'; erro.style.display='block'; return; }
+  var btn=document.getElementById('btn-admin-login');
+  btn.disabled=true; btn.textContent='Entrando...';
+  try{
+    await window._entrar(window._auth, email, senha);
+  }catch(e){
+    erro.textContent='E-mail ou senha incorretos.';
+    erro.style.display='block';
+  }
+  btn.disabled=false; btn.textContent='Entrar';
+}
+
+function sairAdmin(){
+  if(window._auth&&window._sair) window._sair(window._auth);
+}
+
+/* Chamado pelo Firebase sempre que o estado de login muda, inclusive ao abrir
+   a pagina: quem ja entrou antes nao precisa digitar de novo. */
+window._onAuth = function(u){
+  var tela=document.getElementById('admin-login-screen');
+  var painel=document.getElementById('admin-panel');
+  if(!tela||!painel) return;
+  if(u){
+    tela.style.display='none';
+    painel.style.display='block';
     loadRelatorios();
   }else{
-    document.getElementById('pwd-error').style.display='block';
+    tela.style.display='';
+    painel.style.display='none';
+    var p=document.getElementById('admin-pwd'); if(p) p.value='';
   }
-}
+};
 
 async function loadRelatorios(){
   if(!window._fbReady){
@@ -728,6 +805,15 @@ function formatDate(d){
   if(p.length<3) return d;
   return p[2]+'/'+p[1]+'/'+p[0];
 }
+
+/* Ao abrir, o formulario ja vem com o periodo certo. Ate o dia 10 assume o mes
+   que acabou de fechar, que e quando o relatorio e preenchido de verdade. */
+(function iniciar(){
+  var ano=document.getElementById('ano');
+  if(ano&&!ano.value) ano.value=anoPadrao();
+  var mes=document.getElementById('mes');
+  if(mes&&!mes.value) mes.value=mesPadrao();
+})();
 </script>
 </body>
 </html>
