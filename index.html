@@ -437,6 +437,20 @@ async function enviar(){
   try{
     var d=collectData();
     await window._addDoc(window._collection(window._db,'relatorios'), d);
+
+    /* Avisa o painel gerencial da escola. De proposito sem await e sem quebrar o
+       envio: se o n8n estiver fora do ar, o relatorio do professor ja foi salvo
+       do mesmo jeito — o painel so nao compara esse mes. O professor nunca ve
+       erro por causa disto. */
+    try{
+      fetch('https://alliancesjc.app.n8n.cloud/webhook/relatorio-professor',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(d),
+        keepalive:true
+      }).catch(function(){});
+    }catch(e){}
+
     currentRel=d;
     var totalP=d.aulasParticulares.reduce(function(a,b){return a+b.qtd;},0);
     document.getElementById('success-text').textContent=
