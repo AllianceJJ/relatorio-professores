@@ -1,0 +1,36 @@
+{
+  "_leia": "Lista de valências da avaliação. Para trocar nome ou descrição, edite aqui; a página lê este arquivo ao abrir. 'ativa': false esconde a valência sem apagar. A ordem aqui é a ordem na tela.",
+  "estrelas": 5,
+  "valencias": [
+    {
+      "id": "respeito",
+      "nome": "Respeito e companheirismo",
+      "descricao": "Cumprimenta, respeita professores e colegas e ajuda quem está aprendendo.",
+      "ativa": true
+    },
+    {
+      "id": "capricho",
+      "nome": "Capricho nas técnicas",
+      "descricao": "Faz os movimentos com cuidado e atenção aos detalhes, sem pressa.",
+      "ativa": true
+    },
+    {
+      "id": "empenho",
+      "nome": "Empenho e entusiasmo",
+      "descricao": "Participa das atividades com vontade e não desiste quando fica difícil.",
+      "ativa": true
+    },
+    {
+      "id": "atencao",
+      "nome": "Atenção e escuta",
+      "descricao": "Presta atenção na explicação e segue as orientações do professor.",
+      "ativa": true
+    },
+    {
+      "id": "pontualidade",
+      "nome": "Pontualidade",
+      "descricao": "Chega no horário e já está pronto, de kimono, quando a aula começa.",
+      "ativa": false
+    }
+  ]
+}

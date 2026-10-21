@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Avaliação do Aluno</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script type="module">
+  /* Mesmo projeto Firebase do Relatorio dos Professores; as avaliacoes vao
+     para a colecao propria "avaliacoes". Esta configuracao e publica por
+     natureza (identifica o projeto, nao da acesso): quem protege os dados
+     sao as regras do Firestore. */
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+  const app = initializeApp({
+    apiKey: "AIzaSyDUSUVwIsxOx_4UlCj6chpfew2gVE6Ifn4",
+    authDomain: "relatoriosprofessores-6a562.firebaseapp.com",
+    projectId: "relatoriosprofessores-6a562",
+    storageBucket: "relatoriosprofessores-6a562.firebasestorage.app",
+    messagingSenderId: "488312826147",
+    appId: "1:488312826147:web:4f85a3f9b9e2ce0d8a4496"
+  });
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+  window._salvarAvaliacao = function(d){ return addDoc(collection(db,'avaliacoes'), d); };
+  /* Ler e apagar so funciona com login: as regras do Firestore bloqueiam o resto. */
+  window._listarAvaliacoes = async function(){
+    const snap = await getDocs(query(collection(db,'avaliacoes'), orderBy('dataEnvio','desc')));
+    const lista = [];
+    snap.forEach(function(d){ lista.push(Object.assign({_id:d.id}, d.data())); });
+    return lista;
+  };
+  window._apagarAvaliacao = function(id){ return deleteDoc(doc(db,'avaliacoes',id)); };
+  window._entrar = function(email,senha){ return signInWithEmailAndPassword(auth,email,senha); };
+  window._sair = function(){ return signOut(auth); };
+  onAuthStateChanged(auth, function(u){ window._usuario = u || null; if(window._onAuth) window._onAuth(u); });
+  window._fbReady = true;
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --dark:#0f0f1a;--dark2:#1a1a2e;--gold:#e8c547;--green:#1d9e75;
+  --blue:#2563eb;--red:#dc2626;--border:#e5e7eb;--text:#111827;
+  --text2:#4b5563;--light:#f9fafb;--white:#ffffff;--radius:12px;--radius-sm:8px;
+  --star-off:#d1d5db;
+}
+html,body{min-height:100%;background:var(--light);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:var(--text);font-size:16px}
+.topnav{background:var(--dark2);display:flex;align-items:center;padding:0 1rem;height:56px;position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:8px;color:#fff;font-weight:600;font-size:15px;flex:1}
+.logo-mark{width:28px;height:28px;background:var(--gold);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--dark2);font-size:15px}
+.form-wrap{max-width:480px;margin:0 auto;padding:1.25rem 1rem 2rem}
+.card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.25rem;margin-bottom:12px}
+.card-title{font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;display:flex;align-items:center;gap:6px}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--gold);flex-shrink:0}
+.field{margin-bottom:12px}.field:last-child{margin-bottom:0}
+label{display:block;font-size:13px;color:var(--text2);margin-bottom:5px}
+input[type=text],input[type=number],select,textarea{
+  width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  font-size:15px;color:var(--text);font-family:inherit;background:var(--white);
+  outline:none;-webkit-appearance:none;appearance:none;transition:border-color .15s
+}
+input:focus,select:focus,textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.1)}
+select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:36px}
+textarea{resize:none;line-height:1.5}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* Cada valencia e uma linha; tocar nela seleciona e mostra a descricao. */
+.val-item{border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:8px;cursor:pointer;transition:border-color .15s,background .15s}
+.val-item:last-child{margin-bottom:0}
+.val-item.sel{border-color:var(--gold);background:#fffbeb}
+.val-item.falta{border-color:var(--red)}
+.val-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.val-nome{font-size:14px;font-weight:500}
+.val-desc{display:none;font-size:13px;color:var(--text2);line-height:1.45;margin-top:6px}
+.val-item.sel .val-desc{display:block}
+.stars{display:flex;gap:2px;flex-shrink:0}
+.star{width:30px;height:30px;border:none;background:none;padding:0;cursor:pointer;color:var(--star-off);font-size:26px;line-height:1}
+.star.on{color:var(--gold)}
+
+.btn-primary{width:100%;padding:15px;border-radius:var(--radius);border:none;background:var(--dark2);color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn-primary:active{opacity:.85}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+.salvo{display:none;text-align:center;padding:13px;border-radius:var(--radius);background:#d1fae5;color:#065f46;font-size:15px;font-weight:600}
+.btn-secondary{width:100%;padding:13px;border-radius:var(--radius);border:1.5px solid var(--border);background:var(--white);color:var(--text);font-size:14px;font-weight:500;cursor:pointer;font-family:inherit}
+.btn-pdf{background:var(--red)!important;color:#fff!important;border-color:var(--red)!important}
+.btns-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.aviso{background:#fee2e2;color:#991b1b;border-radius:var(--radius-sm);padding:12px;font-size:14px;line-height:1.5}
+
+.boletim{display:none}
+.bol-head{background:var(--dark2);color:#fff;border-radius:var(--radius);padding:1.1rem 1.25rem;margin-bottom:12px}
+.bol-head h2{font-size:18px;font-weight:700;margin-bottom:2px}
+.bol-head p{font-size:13px;color:rgba(255,255,255,.6)}
+.bol-row{padding:10px 0;border-top:1px solid var(--border)}
+.bol-row:first-child{border-top:none;padding-top:0}
+.bol-row .val-top .stars .star{cursor:default;font-size:22px;width:24px;height:24px}
+.bol-row .val-desc{display:block}
+.bol-obs{font-size:14px;line-height:1.55;white-space:pre-line}
+
+.nav-btns{display:flex;gap:4px}
+.nav-btn{padding:6px 12px;border-radius:6px;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s}
+.nav-btn.active{background:var(--gold);color:var(--dark)}
+.nav-btn:not(.active){background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.7)}
+.page{display:none}.page.active{display:block}
+.login-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:2rem;max-width:340px;margin:3rem auto 0;text-align:center}
+.login-card h2{font-size:18px;font-weight:700;margin-bottom:6px}
+.login-card p{font-size:13px;color:var(--text2);margin-bottom:1.5rem}
+.login-card input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:15px;font-family:inherit;margin-bottom:8px}
+.error-msg{color:var(--red);font-size:13px;margin-top:8px;display:none}
+.admin-wrap{max-width:680px;margin:0 auto;padding:1.25rem 1rem 2rem}
+.admin-header{background:var(--dark2);border-radius:var(--radius);padding:1.1rem 1.25rem;margin-bottom:14px;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.admin-header h2{font-size:17px;font-weight:600;margin-bottom:2px}
+.admin-header p{font-size:13px;color:rgba(255,255,255,.55)}
+.btn-sair{padding:7px 14px;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:transparent;color:#fff;font-size:13px;cursor:pointer;font-family:inherit;flex-shrink:0}
+.filter-bar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.filter-bar select,.filter-bar input{flex:1;min-width:130px;font-size:13px;padding:8px 10px}
+.av-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:.9rem 1.1rem;margin-bottom:10px}
+.av-top{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer}
+.av-top h3{font-size:15px;font-weight:600;margin-bottom:2px}
+.av-top span{font-size:12px;color:var(--text2)}
+.av-media{font-size:13px;font-weight:600;color:#92400e;background:#fef3c7;border-radius:20px;padding:3px 10px;flex-shrink:0}
+.av-detail{display:none;margin-top:10px;padding-top:6px;border-top:1px solid var(--border)}
+.av-detail.open{display:block}
+.av-detail .bol-row{padding:8px 0}
+.av-acoes{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.btn-sm{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--white);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit}
+.btn-sm.danger{border-color:#fca5a5;color:var(--red)}
+.vazio{text-align:center;padding:2.5rem 1rem;color:var(--text2);font-size:14px}
+</style>
+</head>
+<body>
+
+<nav class="topnav">
+  <div class="logo"><div class="logo-mark">★</div>Avaliação do Aluno</div>
+  <div class="nav-btns">
+    <button class="nav-btn active" onclick="mostrarPagina('professor',this)">Professor</button>
+    <button class="nav-btn" onclick="mostrarPagina('admin',this)">Admin</button>
+  </div>
+</nav>
+
+<div class="page active" id="page-professor">
+<div class="form-wrap">
+  <div id="form-body">
+
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Aluno</div>
+      <div class="field">
+        <label>Nome do aluno</label>
+        <input type="text" id="aluno" placeholder="Nome completo">
+      </div>
+      <div class="field">
+        <label>Professor</label>
+        <input type="text" id="professor" placeholder="Quem está avaliando">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Mês</label>
+          <select id="mes">
+            <option value="">Selecione</option>
+            <option>Janeiro</option><option>Fevereiro</option><option>Março</option>
+            <option>Abril</option><option>Maio</option><option>Junho</option>
+            <option>Julho</option><option>Agosto</option><option>Setembro</option>
+            <option>Outubro</option><option>Novembro</option><option>Dezembro</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Ano</label>
+          <input type="number" id="ano" min="2020" max="2099">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Valências</div>
+      <div id="val-list"><p style="font-size:14px;color:var(--text2)">Carregando…</p></div>
+    </div>
+
+    <div class="field" style="margin-bottom:14px">
+      <label>Recado para a família (opcional)</label>
+      <textarea id="obs" rows="3" placeholder="Um ponto forte e algo para treinar no próximo mês..."></textarea>
+    </div>
+
+    <button class="btn-primary" onclick="gerar()">Ver avaliação</button>
+  </div>
+
+  <div class="boletim" id="boletim">
+    <div class="bol-head">
+      <h2 id="bol-aluno"></h2>
+      <p id="bol-periodo"></p>
+    </div>
+    <div class="card" id="bol-vals"></div>
+    <div class="card" id="bol-obs-card">
+      <div class="card-title"><span class="dot"></span>Recado do professor</div>
+      <div class="bol-obs" id="bol-obs"></div>
+    </div>
+    <button class="btn-primary" id="btn-salvar" onclick="salvar()">Salvar avaliação</button>
+    <div class="salvo" id="salvo">✓ Avaliação salva</div>
+    <div class="btns-row">
+      <button class="btn-secondary" id="btn-editar" onclick="voltar()">Editar</button>
+      <button class="btn-secondary btn-pdf" onclick="exportarPDF()">Exportar PDF</button>
+    </div>
+    <button class="btn-secondary" style="margin-top:10px" onclick="novaAvaliacao()">Avaliar outro aluno</button>
+  </div>
+</div>
+</div>
+
+<!-- ADMIN: mesma conta de administrador do Relatorio Mensal -->
+<div class="page" id="page-admin">
+  <div id="admin-login">
+    <div class="login-card">
+      <div style="font-size:32px;margin-bottom:12px">🔐</div>
+      <h2>Área do administrador</h2>
+      <p>Entre com a conta de administrador.</p>
+      <input type="email" id="admin-email" placeholder="E-mail" autocomplete="username" onkeydown="if(event.key==='Enter')entrarAdmin()">
+      <input type="password" id="admin-pwd" placeholder="Senha" autocomplete="current-password" onkeydown="if(event.key==='Enter')entrarAdmin()">
+      <button class="btn-primary" id="btn-entrar" onclick="entrarAdmin()">Entrar</button>
+      <div class="error-msg" id="login-erro"></div>
+    </div>
+  </div>
+  <div id="admin-painel" style="display:none">
+    <div class="admin-wrap">
+      <div class="admin-header">
+        <div><h2>Avaliações salvas</h2><p id="admin-sub">Carregando…</p></div>
+        <button class="btn-sair" onclick="window._sair&&window._sair()">Sair</button>
+      </div>
+      <div class="filter-bar">
+        <select id="f-mes" onchange="renderAdmin()">
+          <option value="">Todos os meses</option>
+          <option>Janeiro</option><option>Fevereiro</option><option>Março</option>
+          <option>Abril</option><option>Maio</option><option>Junho</option>
+          <option>Julho</option><option>Agosto</option><option>Setembro</option>
+          <option>Outubro</option><option>Novembro</option><option>Dezembro</option>
+        </select>
+        <input type="text" id="f-busca" placeholder="Buscar aluno ou professor..." oninput="renderAdmin()">
+      </div>
+      <div id="av-lista"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+var MESES=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+var config=null;      // conteudo do valencias.json
+var notas={};         // id da valencia -> 1..estrelas
+var atual=null;       // avaliacao mostrada no boletim
+
+/* Nomes e descricoes ficam no valencias.json, para trocar sem mexer aqui.
+   So entram as marcadas como "ativa". */
+function valenciasAtivas(){
+  return config.valencias.filter(function(v){return v.ativa!==false;});
+}
+
+function esc(s){
+  return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});
+}
+
+function estrelasHtml(nota,editavel,id){
+  var h='<div class="stars">', total=(config&&config.estrelas)||5;
+  for(var i=1;i<=total;i++){
+    h+='<button type="button" class="star'+(i<=nota?' on':'')+'"'
+      +(editavel?' onclick="dar(event,\''+id+'\','+i+')" aria-label="'+i+' de '+total+' estrelas"':' tabindex="-1" aria-hidden="true"')
+      +'>★</button>';
+  }
+  return h+'</div>';
+}
+
+function montarLista(){
+  var h='';
+  valenciasAtivas().forEach(function(v){
+    h+='<div class="val-item" id="vi-'+v.id+'" onclick="selecionar(\''+v.id+'\')">'
+      +'<div class="val-top"><span class="val-nome">'+esc(v.nome)+'</span>'+estrelasHtml(notas[v.id]||0,true,v.id)+'</div>'
+      +'<div class="val-desc">'+esc(v.descricao)+'</div>'
+      +'</div>';
+  });
+  document.getElementById('val-list').innerHTML=h;
+}
+
+/* Uma valencia selecionada por vez: e ela que mostra a descricao. */
+function selecionar(id){
+  document.querySelectorAll('.val-item').forEach(function(el){
+    el.classList.toggle('sel', el.id==='vi-'+id);
+  });
+}
+
+function dar(ev,id,n){
+  ev.stopPropagation();
+  notas[id]=n;
+  var item=document.getElementById('vi-'+id);
+  item.classList.remove('falta');
+  item.querySelectorAll('.star').forEach(function(s,i){s.classList.toggle('on', i<n);});
+  selecionar(id);
+}
+
+function gerar(){
+  var aluno=document.getElementById('aluno').value.trim();
+  var mes=document.getElementById('mes').value;
+  if(!aluno){alert('Informe o nome do aluno.');return;}
+  if(!mes){alert('Selecione o mês.');return;}
+  var faltando=valenciasAtivas().filter(function(v){return !notas[v.id];});
+  if(faltando.length){
+    faltando.forEach(function(v){document.getElementById('vi-'+v.id).classList.add('falta');});
+    alert('Dê de 1 a '+config.estrelas+' estrelas em: '+faltando.map(function(v){return v.nome;}).join(', ')+'.');
+    return;
+  }
+  atual={
+    aluno:aluno,
+    professor:document.getElementById('professor').value.trim(),
+    mes:mes,
+    ano:document.getElementById('ano').value,
+    valencias:valenciasAtivas().map(function(v){return{id:v.id,nome:v.nome,descricao:v.descricao,nota:notas[v.id]};}),
+    obs:document.getElementById('obs').value.trim()
+  };
+  mostrarBoletim(atual);
+}
+
+function mostrarBoletim(a){
+  document.getElementById('bol-aluno').textContent=a.aluno;
+  document.getElementById('bol-periodo').textContent=a.mes+' / '+a.ano+(a.professor?' · Professor '+a.professor:'');
+  document.getElementById('bol-vals').innerHTML=a.valencias.map(function(v){
+    return '<div class="bol-row"><div class="val-top"><span class="val-nome">'+esc(v.nome)+'</span>'
+      +estrelasHtml(v.nota,false)+'</div><div class="val-desc">'+esc(v.descricao)+'</div></div>';
+  }).join('');
+  document.getElementById('bol-obs').textContent=a.obs;
+  document.getElementById('bol-obs-card').style.display=a.obs?'':'none';
+  estadoSalvo(false);
+  document.getElementById('form-body').style.display='none';
+  document.getElementById('boletim').style.display='block';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* Depois de salva, a avaliacao nao volta para edicao: editar e salvar de novo
+   criaria uma segunda copia no banco. */
+function estadoSalvo(salvo){
+  var btn=document.getElementById('btn-salvar');
+  btn.style.display=salvo?'none':'';
+  btn.disabled=false; btn.textContent='Salvar avaliação';
+  document.getElementById('salvo').style.display=salvo?'block':'none';
+  document.getElementById('btn-editar').style.display=salvo?'none':'';
+}
+
+/* O nome de cada valencia vai junto da nota: se o valencias.json mudar
+   depois, as avaliacoes antigas continuam dizendo o que foi avaliado. */
+async function salvar(){
+  var a=atual; if(!a)return;
+  if(!window._fbReady){alert('Aguarde a conexão com o banco de dados.');return;}
+  var btn=document.getElementById('btn-salvar');
+  btn.disabled=true; btn.textContent='Salvando…';
+  try{
+    await window._salvarAvaliacao({
+      aluno:a.aluno,
+      professor:a.professor,
+      mes:a.mes,
+      ano:a.ano,
+      valencias:a.valencias.map(function(v){return{id:v.id,nome:v.nome,nota:v.nota};}),
+      obs:a.obs,
+      dataEnvio:new Date().toISOString()
+    });
+    estadoSalvo(true);
+  }catch(e){
+    alert('Erro ao salvar: '+e.message);
+    btn.disabled=false; btn.textContent='Salvar avaliação';
+  }
+}
+
+function voltar(){
+  document.getElementById('boletim').style.display='none';
+  document.getElementById('form-body').style.display='block';
+}
+
+/* Professor, mes e ano continuam preenchidos: normalmente se avalia a turma toda em sequencia. */
+function novaAvaliacao(){
+  var salva=document.getElementById('salvo').style.display==='block';
+  if(atual&&!salva&&!confirm('Esta avaliação ainda não foi salva. Começar outra mesmo assim?')) return;
+  notas={}; atual=null;
+  document.getElementById('aluno').value='';
+  document.getElementById('obs').value='';
+  montarLista();
+  voltar();
+  document.getElementById('aluno').focus();
+}
+
+/* A fonte padrao do PDF nao tem o caractere ★, entao a estrela e desenhada. */
+function estrelaPDF(doc,cx,cy,r,cheia){
+  var pts=[];
+  for(var i=0;i<10;i++){
+    var ang=-Math.PI/2+i*Math.PI/5, raio=(i%2===0)?r:r*0.45;
+    pts.push([cx+raio*Math.cos(ang), cy+raio*Math.sin(ang)]);
+  }
+  var rel=[];
+  for(var j=1;j<pts.length;j++) rel.push([pts[j][0]-pts[j-1][0], pts[j][1]-pts[j-1][1]]);
+  if(cheia){doc.setFillColor(232,197,71);doc.setDrawColor(232,197,71);}
+  else{doc.setFillColor(229,231,235);doc.setDrawColor(229,231,235);}
+  doc.lines(rel,pts[0][0],pts[0][1],[1,1],'FD',true);
+}
+
+/* O banco guarda so id, nome e nota; a descricao vem do valencias.json atual. */
+function descricaoDe(v){
+  if(v.descricao) return v.descricao;
+  var c=config&&config.valencias.find(function(x){return x.id===v.id;});
+  return c?c.descricao:'';
+}
+
+function exportarPDF(a){
+  a=a||atual; if(!a)return;
+  var {jsPDF}=window.jspdf;
+  var doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  var W=210,M=20,y=M;
+
+  doc.setFillColor(26,26,46);
+  doc.roundedRect(M,y,W-M*2,26,3,3,'F');
+  doc.setTextColor(232,197,71);doc.setFontSize(15);doc.setFont(undefined,'bold');
+  doc.text(a.aluno,W/2,y+10,{align:'center'});
+  doc.setTextColor(200,200,220);doc.setFontSize(10);doc.setFont(undefined,'normal');
+  doc.text('Avaliação de '+a.mes+' / '+a.ano+(a.professor?'  ·  Professor '+a.professor:''),W/2,y+18,{align:'center'});
+  y+=36;
+
+  a.valencias.forEach(function(v){
+    doc.setTextColor(20,20,40);doc.setFontSize(12);doc.setFont(undefined,'bold');
+    doc.text(v.nome,M+2,y);
+    var total=(config&&config.estrelas)||5;
+    for(var i=1;i<=total;i++) estrelaPDF(doc,W-M-2-(total-i)*7-3,y-1.6,3,i<=v.nota);
+    y+=6;
+    doc.setTextColor(100,100,120);doc.setFontSize(10);doc.setFont(undefined,'normal');
+    var desc=descricaoDe(v);
+    if(desc){var ls=doc.splitTextToSize(desc,W-M*2-4);doc.text(ls,M+2,y);y+=ls.length*5+4;}
+    else y+=2;
+    doc.setDrawColor(229,231,235);doc.line(M,y-2,W-M,y-2);y+=5;
+  });
+
+  if(a.obs){
+    y+=2;
+    doc.setFillColor(240,240,245);doc.rect(M,y,W-M*2,8,'F');
+    doc.setTextColor(50,50,80);doc.setFontSize(9);doc.setFont(undefined,'bold');
+    doc.text('RECADO DO PROFESSOR',M+4,y+5.5);y+=14;
+    var lo=doc.splitTextToSize(a.obs,W-M*2-8);
+    doc.setFontSize(11);doc.setTextColor(40,40,70);doc.setFont(undefined,'normal');
+    doc.text(lo,M+4,y);
+  }
+
+  doc.save('avaliacao-'+a.aluno.replace(/\s+/g,'-').toLowerCase()+'-'+a.mes+'-'+a.ano+'.pdf');
+}
+
+function mostrarPagina(nome,btn){
+  document.querySelectorAll('.page').forEach(function(p){p.classList.toggle('active', p.id==='page-'+nome);});
+  document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.toggle('active', b===btn);});
+  if(nome==='admin'&&window._usuario) carregarAvaliacoes();
+}
+
+/* ---------- Admin ---------- */
+var todas=[];   // avaliacoes lidas do banco
+
+async function entrarAdmin(){
+  var email=document.getElementById('admin-email').value.trim();
+  var senha=document.getElementById('admin-pwd').value;
+  var erro=document.getElementById('login-erro');
+  erro.style.display='none';
+  if(!email||!senha){erro.textContent='Preencha e-mail e senha.';erro.style.display='block';return;}
+  if(!window._entrar){erro.textContent='Aguarde a conexão com o servidor.';erro.style.display='block';return;}
+  var btn=document.getElementById('btn-entrar');
+  btn.disabled=true; btn.textContent='Entrando…';
+  try{ await window._entrar(email,senha); }
+  catch(e){ erro.textContent='E-mail ou senha incorretos.'; erro.style.display='block'; }
+  btn.disabled=false; btn.textContent='Entrar';
+}
+
+/* Chamado pelo Firebase sempre que o login muda, inclusive ao abrir a pagina. */
+window._onAuth=function(u){
+  document.getElementById('admin-login').style.display=u?'none':'';
+  document.getElementById('admin-painel').style.display=u?'block':'none';
+  if(u) carregarAvaliacoes();
+  else { todas=[]; document.getElementById('admin-pwd').value=''; }
+};
+
+async function carregarAvaliacoes(){
+  var lista=document.getElementById('av-lista');
+  document.getElementById('admin-sub').textContent='Carregando…';
+  lista.innerHTML='';
+  try{
+    todas=await window._listarAvaliacoes();
+    renderAdmin();
+  }catch(e){
+    document.getElementById('admin-sub').textContent='';
+    lista.innerHTML='<div class="aviso">Erro ao carregar: '+esc(e.message)+'</div>';
+  }
+}
+
+function media(a){
+  if(!a.valencias||!a.valencias.length) return 0;
+  return a.valencias.reduce(function(s,v){return s+v.nota;},0)/a.valencias.length;
+}
+
+function renderAdmin(){
+  var fM=document.getElementById('f-mes').value;
+  var fB=document.getElementById('f-busca').value.toLowerCase();
+  var lista=todas.filter(function(a){
+    return (!fM||a.mes===fM) && (!fB||(a.aluno+' '+(a.professor||'')).toLowerCase().indexOf(fB)>=0);
+  });
+  document.getElementById('admin-sub').textContent=lista.length+' avaliação(ões)';
+  var el=document.getElementById('av-lista');
+  if(!lista.length){el.innerHTML='<div class="vazio">Nenhuma avaliação encontrada.</div>';return;}
+  el.innerHTML=lista.map(function(a){
+    var linhas=(a.valencias||[]).map(function(v){
+      return '<div class="bol-row"><div class="val-top"><span class="val-nome">'+esc(v.nome)+'</span>'
+        +estrelasHtml(v.nota,false)+'</div></div>';
+    }).join('');
+    return '<div class="av-card">'
+      +'<div class="av-top" onclick="this.nextElementSibling.classList.toggle(\'open\')">'
+        +'<div><h3>'+esc(a.aluno)+'</h3><span>'+esc(a.mes)+' / '+esc(a.ano)
+          +(a.professor?' · '+esc(a.professor):'')+' · salva em '+new Date(a.dataEnvio).toLocaleDateString('pt-BR')+'</span></div>'
+        +'<div class="av-media">★ '+media(a).toFixed(1).replace('.',',')+'</div>'
+      +'</div>'
+      +'<div class="av-detail">'+linhas
+        +(a.obs?'<div class="bol-obs" style="margin-top:8px;color:var(--text2)">'+esc(a.obs)+'</div>':'')
+        +'<div class="av-acoes">'
+          +'<button class="btn-sm" onclick="exportarPDF(avaliacaoPorId(\''+a._id+'\'))">📄 PDF</button>'
+          +'<button class="btn-sm danger" onclick="apagar(\''+a._id+'\')">🗑 Excluir</button>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
+  }).join('');
+}
+
+function avaliacaoPorId(id){
+  return todas.find(function(a){return a._id===id;});
+}
+
+async function apagar(id){
+  var a=avaliacaoPorId(id); if(!a)return;
+  if(!confirm('Excluir a avaliação de '+a.aluno+' ('+a.mes+'/'+a.ano+') permanentemente? Esta ação não pode ser desfeita.')) return;
+  try{
+    await window._apagarAvaliacao(id);
+    todas=todas.filter(function(x){return x._id!==id;});
+    renderAdmin();
+  }catch(e){
+    alert('Erro ao excluir: '+e.message);
+  }
+}
+
+/* A avaliacao e do mes que acabou de fechar: ate o dia 10 o padrao e o mes
+   anterior (em janeiro, do ano anterior); depois disso, o mes corrente. */
+(function iniciar(){
+  var h=new Date(), cedo=h.getDate()<=10;
+  document.getElementById('ano').value=(cedo&&h.getMonth()===0)?h.getFullYear()-1:h.getFullYear();
+  document.getElementById('mes').value=cedo?MESES[(h.getMonth()+11)%12]:MESES[h.getMonth()];
+
+  fetch('valencias.json',{cache:'no-store'})
+    .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
+    .then(function(c){config=c;config.estrelas=config.estrelas||5;montarLista();})
+    .catch(function(e){
+      document.getElementById('val-list').innerHTML=
+        '<div class="aviso">Não consegui ler a lista de valências (valencias.json): '+esc(e.message)
+        +'. Abra a página pelo endereço do site, não clicando direto no arquivo.</div>';
+    });
+})();
+</script>
+</body>
+</html>
