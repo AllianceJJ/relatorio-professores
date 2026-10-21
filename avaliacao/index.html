@@ -127,6 +127,11 @@ textarea{resize:none;line-height:1.5}
 .btn-sm{padding:7px 14px;border-radius:6px;border:1px solid var(--border);background:var(--white);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;font-family:inherit}
 .btn-sm.danger{border-color:#fca5a5;color:var(--red)}
 .vazio{text-align:center;padding:2.5rem 1rem;color:var(--text2);font-size:14px}
+.lista-info{font-size:12px;color:var(--text2);margin-top:5px}
+.lista-info a{color:var(--text2)}
+.lista-tranca{display:none;margin-top:8px;background:#f9fafb;border:1px dashed var(--border);border-radius:var(--radius-sm);padding:10px;font-size:13px;color:var(--text2)}
+.lista-tranca-linha{display:flex;gap:8px;margin-top:8px}
+.lista-tranca-linha input{flex:1;font-size:14px;padding:8px 10px}
 </style>
 </head>
 <body>
@@ -147,7 +152,17 @@ textarea{resize:none;line-height:1.5}
       <div class="card-title"><span class="dot"></span>Aluno</div>
       <div class="field">
         <label>Nome do aluno</label>
-        <input type="text" id="aluno" placeholder="Nome completo">
+        <input type="text" id="aluno" placeholder="Nome completo" list="lista-alunos" autocomplete="off">
+        <datalist id="lista-alunos"></datalist>
+        <div class="lista-info" id="lista-info"></div>
+        <form class="lista-tranca" id="lista-tranca" onsubmit="event.preventDefault();abrirLista()">
+          <span>🔒 Para ver a lista de alunos, digite a senha da equipe.</span>
+          <div class="lista-tranca-linha">
+            <input type="password" id="senha-equipe" placeholder="Senha da equipe" autocomplete="current-password">
+            <button type="submit" class="btn-sm">Abrir</button>
+          </div>
+          <div class="error-msg" id="senha-erro">Senha incorreta.</div>
+        </form>
       </div>
       <div class="field">
         <label>Professor</label>
@@ -305,6 +320,7 @@ function gerar(){
   }
   atual={
     aluno:aluno,
+    alunoId:idDoAluno(aluno),
     professor:document.getElementById('professor').value.trim(),
     mes:mes,
     ano:document.getElementById('ano').value,
@@ -349,6 +365,7 @@ async function salvar(){
   try{
     await window._salvarAvaliacao({
       aluno:a.aluno,
+      alunoId:a.alunoId,
       professor:a.professor,
       mes:a.mes,
       ano:a.ano,
@@ -537,12 +554,86 @@ async function apagar(id){
   }
 }
 
+/* ---------- Lista de alunos ----------
+   O n8n grava alunos.json com as criancas ativas de ate 12 anos, puxadas do EVO.
+   O repositorio e publico, entao o arquivo vem cifrado (AES-GCM, chave PBKDF2 da
+   senha da equipe — mesmo esquema do Placar, com outra senha). Sem o arquivo ou
+   sem a senha, o professor continua digitando o nome a mao. */
+var CHAVE_SENHA='avaliacao-senha-equipe';
+var pacoteAlunos=null;   // alunos.json como veio do site (cifrado)
+var alunos=[];           // [{id,nome}] depois de aberto
+
+var b64d=function(s){return Uint8Array.from(atob(s),function(c){return c.charCodeAt(0);});};
+
+async function decifrar(pacote,senha){
+  var base=await crypto.subtle.importKey('raw',new TextEncoder().encode(senha),'PBKDF2',false,['deriveKey']);
+  var chave=await crypto.subtle.deriveKey({name:'PBKDF2',salt:b64d(pacote.salt),iterations:200000,hash:'SHA-256'},
+    base,{name:'AES-GCM',length:256},false,['decrypt']);
+  var plano=await crypto.subtle.decrypt({name:'AES-GCM',iv:b64d(pacote.iv)},chave,b64d(pacote.dados));
+  return JSON.parse(new TextDecoder().decode(plano));
+}
+
+async function carregarLista(){
+  try{
+    var r=await fetch('alunos.json?v='+Date.now(),{cache:'no-store'});
+    if(!r.ok) return;
+    pacoteAlunos=await r.json();
+  }catch(e){ return; }
+  if(!pacoteAlunos||!pacoteAlunos.cifrado||!(window.crypto&&crypto.subtle)) return;
+  var guardada=null;
+  try{ guardada=localStorage.getItem(CHAVE_SENHA); }catch(e){}
+  if(guardada&&await tentarSenha(guardada)) return;
+  document.getElementById('lista-tranca').style.display='block';
+}
+
+async function tentarSenha(senha){
+  try{
+    var claro=await decifrar(pacoteAlunos,senha);
+    alunos=(claro.alunos||[]).slice().sort(function(a,b){return a.nome.localeCompare(b.nome,'pt-BR');});
+    try{ localStorage.setItem(CHAVE_SENHA,senha); }catch(e){}
+    document.getElementById('lista-alunos').innerHTML=alunos.map(function(a){return '<option value="'+esc(a.nome)+'">';}).join('');
+    document.getElementById('lista-tranca').style.display='none';
+    var quando=claro.atualizadoEm?new Date(claro.atualizadoEm).toLocaleDateString('pt-BR'):'';
+    document.getElementById('lista-info').innerHTML=alunos.length+' alunos na lista'+(quando?' (atualizada em '+quando+')':'')
+      +' · <a href="#" onclick="esquecerSenha();return false">esquecer senha</a>';
+    return true;
+  }catch(e){
+    try{ localStorage.removeItem(CHAVE_SENHA); }catch(e2){}
+    return false;
+  }
+}
+
+async function abrirLista(){
+  var inp=document.getElementById('senha-equipe');
+  var erro=document.getElementById('senha-erro');
+  erro.style.display='none';
+  if(!inp.value) return;
+  if(await tentarSenha(inp.value)) inp.value='';
+  else erro.style.display='block';
+}
+
+function esquecerSenha(){
+  try{ localStorage.removeItem(CHAVE_SENHA); }catch(e){}
+  alunos=[];
+  document.getElementById('lista-alunos').innerHTML='';
+  document.getElementById('lista-info').innerHTML='';
+  document.getElementById('lista-tranca').style.display='block';
+}
+
+/* Quando o nome digitado bate com a lista, a avaliacao guarda tambem o id do EVO. */
+function idDoAluno(nome){
+  var n=nome.trim().toLowerCase();
+  var a=alunos.find(function(x){return x.nome.toLowerCase()===n;});
+  return a?a.id:null;
+}
+
 /* A avaliacao e do mes que acabou de fechar: ate o dia 10 o padrao e o mes
    anterior (em janeiro, do ano anterior); depois disso, o mes corrente. */
 (function iniciar(){
   var h=new Date(), cedo=h.getDate()<=10;
   document.getElementById('ano').value=(cedo&&h.getMonth()===0)?h.getFullYear()-1:h.getFullYear();
   document.getElementById('mes').value=cedo?MESES[(h.getMonth()+11)%12]:MESES[h.getMonth()];
+  carregarLista();
 
   fetch('valencias.json',{cache:'no-store'})
     .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json();})
