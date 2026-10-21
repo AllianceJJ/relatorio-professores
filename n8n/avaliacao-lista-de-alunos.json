@@ -1,0 +1,176 @@
+{
+    "name":  "Avaliação — lista de alunos",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "rule":  {
+                                                      "interval":  [
+                                                                       {
+                                                                           "field":  "weeks",
+                                                                           "weeksInterval":  1,
+                                                                           "triggerAtDay":  [
+                                                                                                1
+                                                                                            ],
+                                                                           "triggerAtHour":  4
+                                                                       }
+                                                                   ]
+                                                  }
+                                     },
+                      "name":  "Segunda 4h",
+                      "type":  "n8n-nodes-base.scheduleTrigger",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       0,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "/* Base inteira de cadastros da unidade 54. A /v1/members trava em 150 por pagina,\n   entao 6 paginas com passo de 150 cobrem 900 cadastros (eram ~760 em 10/2026).\n   Mesmo endereco que o Placar usa. */\nconst base = \u0027https://evo-integracao.w12app.com.br/api\u0027;\nconst pedidos = [];\nfor (let p = 0; p \u003c 6; p++) pedidos.push({ json: { rotulo: \u0027membros:\u0027 + p, url: base + \u0027/v1/members?idBranch=54\u0026take=150\u0026skip=\u0027 + (p * 150) } });\nreturn pedidos;\n"
+                                     },
+                      "name":  "Plano de coleta",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       220,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "workflowId":  {
+                                                            "__rl":  true,
+                                                            "value":  "ZwLL2NKL4N13Fonr",
+                                                            "mode":  "id"
+                                                        },
+                                         "options":  {
+                                                         "waitForSubWorkflow":  true
+                                                     }
+                                     },
+                      "name":  "Motor EVO",
+                      "type":  "n8n-nodes-base.executeWorkflow",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       440,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "/* Lista de alunos da pagina de avaliacao (relatorio-professores/avaliacao).\n   Entram criancas de ate 12 anos com cadastro ativo e contrato ativo (congelado fica fora).\n   O repositorio e publico: a lista sai cifrada com a senha da equipe, no mesmo esquema\n   do Placar (PBKDF2-SHA256 200.000 iteracoes + AES-256-GCM, tag no fim do texto cifrado),\n   que e o que a pagina sabe abrir. A senha mora na variavel SENHA_AVALIACAO_EQUIPE. */\nconst nc = require(\u0027crypto\u0027);\nconst senha = String($vars.SENHA_AVALIACAO_EQUIPE || \u0027\u0027);\nif (senha.length \u003c 8) throw new Error(\u0027Crie a variavel SENHA_AVALIACAO_EQUIPE (Overview \u003e Variables) com a senha da equipe, com pelo menos 8 caracteres.\u0027);\n\nconst resp = $input.all().map(i =\u003e i.json);\nconst falhas = resp.filter(r =\u003e !r.ok);\nif (falhas.length) throw new Error(\u0027A EVO falhou em \u0027 + falhas.map(f =\u003e f.rotulo + \u0027 (\u0027 + f.status + \u0027)\u0027).join(\u0027, \u0027) + \u0027. A lista nao foi atualizada.\u0027);\nconst pagina = (r) =\u003e Number(String(r.rotulo || \u0027\u0027).split(\u0027:\u0027)[1]);\nconst ultima = resp.slice().sort((a, b) =\u003e pagina(b) - pagina(a))[0];\nif (ultima \u0026\u0026 ultima.qtd \u003e= 150) throw new Error(\u0027A ultima pagina de cadastros veio cheia: a base passou de 900. Aumente as paginas no no Plano de coleta.\u0027);\nconst membros = [].concat(...resp.map(r =\u003e r.itens || []));\n\nconst agora = new Date(Date.now() - 3 * 3600000);\nconst hy = agora.getUTCFullYear(), hm = agora.getUTCMonth() + 1, hd = agora.getUTCDate();\nconst idade = (n) =\u003e {\n  if (!n) return null;\n  const p = String(n).slice(0, 10).split(\u0027-\u0027);\n  const y = Number(p[0]), m = Number(p[1]), d = Number(p[2]);\n  if (!y || !m || !d) return null;\n  let a = hy - y;\n  if (hm \u003c m || (hm === m \u0026\u0026 hd \u003c d)) a--;\n  return a;\n};\n/* Nome vindo todo em maiusculas vira \"Nome Sobrenome\"; o resto fica como esta no EVO. */\nconst MINUSC = [\u0027da\u0027, \u0027de\u0027, \u0027do\u0027, \u0027das\u0027, \u0027dos\u0027, \u0027e\u0027];\nconst cap = (t) =\u003e {\n  t = String(t || \u0027\u0027).trim();\n  if (!t || t !== t.toUpperCase()) return t;\n  return t.toLowerCase().split(\u0027 \u0027).filter(Boolean).map(w =\u003e MINUSC.indexOf(w) \u003e= 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)).join(\u0027 \u0027);\n};\n\nconst vistos = {};\nconst alunos = [];\nlet semNascimento = 0, semContratoAtivo = 0;\nfor (const m of membros) {\n  const id = m.idMember;\n  if (!id || vistos[id]) continue;\n  vistos[id] = 1;\n  if (String(m.status || \u0027\u0027) !== \u0027Active\u0027) continue;\n  const a = idade(m.birthDate);\n  if (a === null) { if (String(m.membershipStatus || \u0027\u0027) === \u0027Active\u0027) semNascimento++; continue; }\n  if (a \u003e 12 || a \u003c 0) continue;\n  if (String(m.membershipStatus || \u0027\u0027) !== \u0027Active\u0027) { semContratoAtivo++; continue; }\n  const nome = (cap(m.firstName) + \u0027 \u0027 + cap(m.lastName)).trim();\n  if (nome) alunos.push({ id: id, nome: nome });\n}\n/* Lista vazia quase sempre e erro de leitura, nao escola sem criancas: nao sobrescreve. */\nif (!alunos.length) throw new Error(\u0027Nenhuma crianca encontrada em \u0027 + membros.length + \u0027 cadastros. A lista nao foi atualizada.\u0027);\n\nconst dados = { atualizadoEm: new Date().toISOString(), alunos: alunos };\nconst salt = nc.randomBytes(16);\nconst iv = nc.randomBytes(12);\nconst chave = nc.pbkdf2Sync(senha, salt, 200000, 32, \u0027sha256\u0027);\nconst cip = nc.createCipheriv(\u0027aes-256-gcm\u0027, chave, iv);\nconst ct = Buffer.concat([cip.update(JSON.stringify(dados), \u0027utf8\u0027), cip.final(), cip.getAuthTag()]);\nconst pacote = { cifrado: 1, atualizadoEm: dados.atualizadoEm, salt: salt.toString(\u0027base64\u0027), iv: iv.toString(\u0027base64\u0027), dados: ct.toString(\u0027base64\u0027) };\n\nreturn [{ json: {\n  arquivo: JSON.stringify(pacote, null, 2),\n  resumo: { criancas: alunos.length, cadastros_lidos: membros.length, sem_data_nascimento: semNascimento, criancas_sem_contrato_ativo: semContratoAtivo }\n} }];\n"
+                                     },
+                      "name":  "Montar lista e cifrar",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       660,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "authentication":  "accessToken",
+                                         "resource":  "file",
+                                         "operation":  "edit",
+                                         "owner":  {
+                                                       "__rl":  true,
+                                                       "mode":  "name",
+                                                       "value":  "AllianceJJ"
+                                                   },
+                                         "repository":  {
+                                                            "__rl":  true,
+                                                            "mode":  "name",
+                                                            "value":  "relatorio-professores"
+                                                        },
+                                         "filePath":  "avaliacao/alunos.json",
+                                         "binaryData":  false,
+                                         "fileContent":  "={{ $json.arquivo }}",
+                                         "commitMessage":  "=Lista de alunos da avaliacao: {{ $json.resumo.criancas }} criancas",
+                                         "additionalParameters":  {
+
+                                                                  }
+                                     },
+                      "name":  "Gravar no GitHub",
+                      "type":  "n8n-nodes-base.github",
+                      "typeVersion":  1.1,
+                      "position":  [
+                                       880,
+                                       0
+                                   ],
+                      "credentials":  {
+                                          "githubApi":  {
+                                                            "id":  "DfrBE1N1wTU0j6pa",
+                                                            "name":  "GitHub - alliancejj"
+                                                        }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "content":  "## Avaliação — lista de alunos\n\nGera a lista de nomes da página de avaliação (alliancejj.github.io/relatorio-professores/avaliacao/).\n\n**O que faz:** toda segunda às 4h lê os cadastros no EVO (6 chamadas, pelo Motor EVO), separa as crianças de até 12 anos com contrato ativo e grava avaliacao/alunos.json no GitHub, **cifrado**.\n\n**Senha:** variável SENHA_AVALIACAO_EQUIPE (Overview \u003e Variables). É a mesma que os professores digitam na página. Trocou aqui, rode o workflow e passe a nova senha para a equipe.\n\nFicam fora: congelados e cadastros sem data de nascimento (o resumo do nó \"Montar lista e cifrar\" conta quantos).",
+                                         "height":  320,
+                                         "width":  560,
+                                         "color":  4
+                                     },
+                      "name":  "Sobre",
+                      "type":  "n8n-nodes-base.stickyNote",
+                      "typeVersion":  1,
+                      "position":  [
+                                       0,
+                                       -380
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "Segunda 4h":  {
+                                           "main":  [
+                                                        [
+                                                            {
+                                                                "node":  "Plano de coleta",
+                                                                "type":  "main",
+                                                                "index":  0
+                                                            }
+                                                        ]
+                                                    ]
+                                       },
+                        "Plano de coleta":  {
+                                                "main":  [
+                                                             [
+                                                                 {
+                                                                     "node":  "Motor EVO",
+                                                                     "type":  "main",
+                                                                     "index":  0
+                                                                 }
+                                                             ]
+                                                         ]
+                                            },
+                        "Motor EVO":  {
+                                          "main":  [
+                                                       [
+                                                           {
+                                                               "node":  "Montar lista e cifrar",
+                                                               "type":  "main",
+                                                               "index":  0
+                                                           }
+                                                       ]
+                                                   ]
+                                      },
+                        "Montar lista e cifrar":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Gravar no GitHub",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  }
+                    },
+    "settings":  {
+                     "timezone":  "America/Sao_Paulo",
+                     "errorWorkflow":  "U2Tv6yvMexNZyaei",
+                     "saveDataSuccessExecution":  "none",
+                     "saveManualExecutions":  false,
+                     "executionOrder":  "v1"
+                 }
+}
