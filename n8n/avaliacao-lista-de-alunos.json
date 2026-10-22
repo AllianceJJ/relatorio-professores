@@ -6,17 +6,17 @@
                                          "rule":  {
                                                       "interval":  [
                                                                        {
-                                                                           "field":  "weeks",
-                                                                           "weeksInterval":  1,
-                                                                           "triggerAtDay":  [
-                                                                                                1
-                                                                                            ],
-                                                                           "triggerAtHour":  4
+                                                                           "field":  "cronExpression",
+                                                                           "expression":  "0 4 1 1,4,7,10 *"
+                                                                       },
+                                                                       {
+                                                                           "field":  "cronExpression",
+                                                                           "expression":  "0 4 23 10 *"
                                                                        }
                                                                    ]
                                                   }
                                      },
-                      "name":  "Segunda 4h",
+                      "name":  "Trimestral 4h (+ teste 23/10)",
                       "type":  "n8n-nodes-base.scheduleTrigger",
                       "typeVersion":  1.2,
                       "position":  [
@@ -106,7 +106,7 @@
                   },
                   {
                       "parameters":  {
-                                         "content":  "## Avaliação — lista de alunos\n\nGera a lista de nomes da página de avaliação (alliancejj.github.io/relatorio-professores/avaliacao/).\n\n**O que faz:** toda segunda às 4h lê os cadastros no EVO (6 chamadas, pelo Motor EVO), separa as crianças de até 12 anos com contrato ativo e grava avaliacao/alunos.json no GitHub, **cifrado**.\n\n**Senha:** variável SENHA_AVALIACAO_EQUIPE (Overview \u003e Variables). É a mesma que os professores digitam na página. Trocou aqui, rode o workflow e passe a nova senha para a equipe.\n\nFicam fora: congelados e cadastros sem data de nascimento (o resumo do nó \"Montar lista e cifrar\" conta quantos).",
+                                         "content":  "## Avaliação — lista de alunos\n\nGera a lista de nomes da página de avaliação (alliancejj.github.io/relatorio-professores/avaliacao/).\n\n**O que faz:** a cada trimestre (dia 1º de jan, abr, jul e out, às 4h) lê os cadastros no EVO (6 chamadas, pelo Motor EVO), separa as crianças de até 12 anos com contrato ativo e grava avaliacao/alunos.json no GitHub, **cifrado**. A regra 2 do gatilho (23/10 às 4h) é só o teste de 2026: apague depois de conferir.\n\n**Senha:** variável SENHA_AVALIACAO_EQUIPE (Overview \u003e Variables). É a mesma que os professores digitam na página. Trocou aqui, rode o workflow e passe a nova senha para a equipe.\n\nFicam fora: congelados e cadastros sem data de nascimento (o resumo do nó \"Montar lista e cifrar\" conta quantos).",
                                          "height":  320,
                                          "width":  560,
                                          "color":  4
@@ -121,17 +121,6 @@
                   }
               ],
     "connections":  {
-                        "Segunda 4h":  {
-                                           "main":  [
-                                                        [
-                                                            {
-                                                                "node":  "Plano de coleta",
-                                                                "type":  "main",
-                                                                "index":  0
-                                                            }
-                                                        ]
-                                                    ]
-                                       },
                         "Plano de coleta":  {
                                                 "main":  [
                                                              [
@@ -164,7 +153,18 @@
                                                                        }
                                                                    ]
                                                                ]
-                                                  }
+                                                  },
+                        "Trimestral 4h (+ teste 23/10)":  {
+                                                              "main":  [
+                                                                           [
+                                                                               {
+                                                                                   "node":  "Plano de coleta",
+                                                                                   "type":  "main",
+                                                                                   "index":  0
+                                                                               }
+                                                                           ]
+                                                                       ]
+                                                          }
                     },
     "settings":  {
                      "timezone":  "America/Sao_Paulo",
